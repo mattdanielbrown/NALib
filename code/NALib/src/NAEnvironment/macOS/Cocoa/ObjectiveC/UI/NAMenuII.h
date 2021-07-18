@@ -52,7 +52,7 @@ NA_RUNTIME_TYPE(NACocoaMenuItem, na_DestructCocoaMenuItem, NA_FALSE);
   if(index == -1){
     [self addItem:item];
   }else{
-    [self insertItem:item atIndex: (NSUInteger)index];
+    [self insertItem:item atIndex: (NSInteger)index];
   }
 }
 
@@ -71,7 +71,7 @@ NA_RUNTIME_TYPE(NACocoaMenuItem, na_DestructCocoaMenuItem, NA_FALSE);
 
 @implementation NACocoaNativeMenuItem
 
-- (id) initWithMenuItem:(NACocoaMenuItem*)newCocoaMenuItem text:(NAUTF8Char*) text{
+- (id) initWithMenuItem:(NACocoaMenuItem*)newCocoaMenuItem text:(const NAUTF8Char*) text{
   self = [super
     initWithTitle:[NSString stringWithUTF8String:text]
     action:@selector(itemSelected:)
@@ -112,7 +112,7 @@ NA_DEF void na_DestructCocoaMenu(NACocoaMenu* cocoaMenu){
 
 
 
-NA_DEF NAMenuItem* naNewMenuItem(NAMenu* menu, NAUTF8Char* text, NAMenuItem* atItem){
+NA_DEF NAMenuItem* naNewMenuItem(NAMenu* menu, const NAUTF8Char* text, NAMenuItem* atItem){
   NACocoaMenuItem* cocoaMenuItem = naNew(NACocoaMenuItem);
   
   NACocoaNativeMenuItem* nativeItemPtr = [[NACocoaNativeMenuItem alloc]
@@ -135,6 +135,25 @@ NA_DEF NAMenuItem* naNewMenuItem(NAMenu* menu, NAUTF8Char* text, NAMenuItem* atI
 }
 
 
+NA_DEF NAMenuItem* naNewMenuSeparator(NAMenu* menu, NAMenuItem* atItem){
+  NACocoaMenuItem* cocoaMenuItem = naNew(NACocoaMenuItem);
+  
+  NSMenuItem* nativeItemPtr = [NSMenuItem separatorItem];
+  na_InitMenuItem((NAMenuItem*)cocoaMenuItem, NA_COCOA_PTR_OBJC_TO_C(nativeItemPtr));
+
+  naDefineCocoaObject(NACocoaNativeMenu, nativeMenuPtr, menu);
+  
+  if(atItem){
+    naDefineCocoaObject(NACocoaNativeMenuItem, nativeItemAtPtr, atItem);
+    [nativeMenuPtr addMenuItem:nativeItemPtr atItem:nativeItemAtPtr];
+  }else{
+    [nativeMenuPtr addMenuItem:nativeItemPtr atItem:nil];
+  }
+  
+  na_AddMenuChild(menu, (NAMenuItem*)cocoaMenuItem);
+  
+  return (NAMenuItem*)cocoaMenuItem;
+}
 
 NA_DEF void na_DestructCocoaMenuItem(NACocoaMenuItem* cocoaMenuItem){
   na_ClearMenuItem((NAMenuItem*)cocoaMenuItem);

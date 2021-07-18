@@ -4,12 +4,15 @@
 // actually contains non-inlinenable code. See NAWINAPI.c for more information.
 // Do not include this file anywhere else!
 
+#define NA_WINAPI_BUTTON_BORDERLESS 0x01
+#define NA_WINAPI_BUTTON_STATEFUL   0x02
+#define NA_WINAPI_BUTTON_STATE      0x04
 
 typedef struct NAWINAPIButton NAWINAPIButton;
 struct NAWINAPIButton{
   NAButton   button;
   const NAUIImage* image;
-  NABool     transparent;
+  uint32 state;
 };
 
 NA_HAPI void na_DestructWINAPIButton(NAWINAPIButton* winapiButton);
@@ -43,16 +46,22 @@ NAWINAPICallbackInfo naButtonWINAPIProc(void* uiElement, UINT message, WPARAM wP
   case WM_CAPTURECHANGED:
   case WM_STYLECHANGING:
   case WM_STYLECHANGED:
-  case WM_KILLFOCUS:
   case WM_IME_NOTIFY:
   case WM_LBUTTONUP:
   case BM_SETSTATE:
   case BM_SETCHECK:
+  case BM_GETSTATE:
+    break;
+
   case WM_SETFOCUS:
+  case WM_KILLFOCUS:
+    // We do not display any caret.
+    info.hasBeenHandeled = NA_TRUE;
+    info.result = 0;
     break;
 
   default:
-    //printf("Uncaught Button message" NA_NL);
+    printf("Uncaught Button message" NA_NL);
     break;
   }
   
@@ -63,15 +72,18 @@ NAWINAPICallbackInfo naButtonWINAPIProc(void* uiElement, UINT message, WPARAM wP
 
 NAWINAPICallbackInfo naButtonWINAPINotify(void* uiElement, WORD notificationCode){
   NAWINAPICallbackInfo info = {NA_FALSE, 0};
+  NAButton* button = (NAButton*)uiElement;
+
   switch(notificationCode){
-    case BN_CLICKED:
-      na_DispatchUIElementCommand(uiElement, NA_UI_COMMAND_PRESSED);
-      info.hasBeenHandeled = NA_TRUE;
-      info.result = 0;
-      break;
-    default:
-      //printf("Uncaught Button notification" NA_NL);
-      break;
+  case BN_CLICKED:
+    naSetButtonState(button, !naGetButtonState(button));
+    na_DispatchUIElementCommand(uiElement, NA_UI_COMMAND_PRESSED);
+    info.hasBeenHandeled = NA_TRUE;
+    info.result = 0;
+    break;
+  default:
+    //printf("Uncaught Button notification" NA_NL);
+    break;
   }
   return info;
 }
@@ -93,12 +105,12 @@ NAWINAPICallbackInfo naButtonWINAPIDrawItem (void* uiElement, DRAWITEMSTRUCT* dr
 
   HDC hMemDC = CreateCompatibleDC(drawitemstruct->hDC);
 
-  NAWINAPIButton* button = (NAWINAPIButton*)uiElement;
+  NAWINAPIButton* winapiButton = (NAWINAPIButton*)uiElement;
   NAWINAPICallbackInfo info = {NA_TRUE, TRUE};
 
   CallWindowProc(na_GetApplicationOldButtonWindowProc(), naGetUIElementNativePtr(uiElement), WM_ERASEBKGND, (WPARAM)drawitemstruct->hDC, (LPARAM)NA_NULL);
 
-  if(!button->transparent){
+  if(!naGetFlagu32(winapiButton->state, NA_WINAPI_BUTTON_BORDERLESS)){
     long oldstyle = (long)GetWindowLongPtr(naGetUIElementNativePtr(uiElement), GWL_STYLE);
     long newstyle = (oldstyle & ~BS_OWNERDRAW) | BS_TEXT | BS_CENTER | BS_VCENTER;
     SetWindowLongPtr(naGetUIElementNativePtr(uiElement), GWL_STYLE, (LONG_PTR)newstyle);
@@ -109,44 +121,66 @@ NAWINAPICallbackInfo naButtonWINAPIDrawItem (void* uiElement, DRAWITEMSTRUCT* dr
     SetWindowLongPtr(naGetUIElementNativePtr(uiElement), GWL_STYLE, (LONG_PTR)oldstyle);
   }
 
-  size1x = naGetUIImage1xSize(button->image);
+  if(winapiButton->image)
+  {
+    size1x = naGetUIImage1xSize(winapiButton->image);
 
-  buttonsize = naMakeSizei(
-    drawitemstruct->rcItem.right - drawitemstruct->rcItem.left,
-    drawitemstruct->rcItem.bottom - drawitemstruct->rcItem.top);
-  offset = naMakePosi(
-    (buttonsize.width - size1x.width) / 2,
-    (buttonsize.height - size1x.height) / 2);
+    buttonsize = naMakeSizei(
+      drawitemstruct->rcItem.right - drawitemstruct->rcItem.left,
+      drawitemstruct->rcItem.bottom - drawitemstruct->rcItem.top);
+    offset = naMakePosi(
+      (buttonsize.width - size1x.width) / 2,
+      (buttonsize.height - size1x.height) / 2);
 
-  foreImage = na_GetUIImageBabyImage(button->image, NA_UIIMAGE_RESOLUTION_1x, NA_UIIMAGE_KIND_MAIN, NA_UIIMAGE_SKIN_LIGHT);
+    NABool alt = NA_FALSE;
+    LRESULT result = SendMessage(naGetUIElementNativePtr(winapiButton), BM_GETSTATE, (WPARAM)NA_NULL, (LPARAM)NA_NULL);
+    NABool pushed = (result & BST_PUSHED) == BST_PUSHED;
+    if(naGetFlagu32(winapiButton->state, NA_WINAPI_BUTTON_STATEFUL))
+    {
+      if(naGetButtonState((NAButton*)winapiButton)){
+        alt = NA_TRUE;
+      }
+      // unfortuantely, the following does not work as the button is not drawn
+      // with the correct state when releasing the mouse.
+      //if(pushed){alt = !alt;}
+    }else{
+      alt = pushed;
+    }
 
-  // We store the background where the image will be placed.
-  backBuffer = naMalloc(size1x.width * size1x.height * 4);
-  hBackBitmap = CreateBitmap((int)size1x.width, (int)size1x.height, 1, 32, backBuffer);
-  hOldBitmap = SelectObject(hMemDC, hBackBitmap);
-  BitBlt(hMemDC, 0, 0, (int)size1x.width, (int)size1x.height, drawitemstruct->hDC, (int)offset.x, (int)offset.y, SRCCOPY);
-  backImage = naCreateBabyImageFromNativeImage(hBackBitmap);
+    if(alt){
+      foreImage = na_GetUIImageBabyImage(winapiButton->image, NA_UIIMAGE_RESOLUTION_1x, NA_UIIMAGE_KIND_ALT, NA_UIIMAGE_SKIN_LIGHT);
+    }else{
+      foreImage = na_GetUIImageBabyImage(winapiButton->image, NA_UIIMAGE_RESOLUTION_1x, NA_UIIMAGE_KIND_MAIN, NA_UIIMAGE_SKIN_LIGHT);
+    }
 
-  // Now we blend manually the foreground to the background.
-  blendedImage = naCreateBabyImageWithBlend(backImage, foreImage, NA_BLEND_OVERLAY, 1.f);
-  blendedBuffer = naMalloc(size1x.width * size1x.height * 4);
-  naConvertBabyImageTou8(blendedImage, blendedBuffer, NA_TRUE, NA_COLOR_BUFFER_BGR0);
-  hBlendedBitmap = CreateBitmap((int)size1x.width, (int)size1x.height, 1, 32, blendedBuffer);
+    // We store the background where the image will be placed.
+    backBuffer = naMalloc(size1x.width * size1x.height * 4);
+    hBackBitmap = CreateBitmap((int)size1x.width, (int)size1x.height, 1, 32, backBuffer);
+    hOldBitmap = SelectObject(hMemDC, hBackBitmap);
+    BitBlt(hMemDC, 0, 0, (int)size1x.width, (int)size1x.height, drawitemstruct->hDC, (int)offset.x, (int)offset.y, SRCCOPY);
+    backImage = naCreateBabyImageFromNativeImage(hBackBitmap);
 
-  // Finally, we put the blended image onscreen.
-  SelectObject(hMemDC, hBlendedBitmap);
-  BitBlt(drawitemstruct->hDC, (int)offset.x, (int)offset.y, (int)size1x.width, (int)size1x.height, hMemDC, 0, 0, SRCCOPY);
-  SelectObject(hMemDC, hOldBitmap);
+    // Now we blend manually the foreground to the background.
+    blendedImage = naCreateBabyImageWithBlend(backImage, foreImage, NA_BLEND_OVERLAY, 1.f);
+    blendedBuffer = naMalloc(size1x.width * size1x.height * 4);
+    naConvertBabyImageTou8(blendedImage, blendedBuffer, NA_TRUE, NA_COLOR_BUFFER_BGR0);
+    hBlendedBitmap = CreateBitmap((int)size1x.width, (int)size1x.height, 1, 32, blendedBuffer);
 
-  // Deleting the blended objects and buffers
-  DeleteObject(hBlendedBitmap);
-  naFree(blendedBuffer);
-  naReleaseBabyImage(blendedImage);
+    // Finally, we put the blended image onscreen.
+    SelectObject(hMemDC, hBlendedBitmap);
+    BitBlt(drawitemstruct->hDC, (int)offset.x, (int)offset.y, (int)size1x.width, (int)size1x.height, hMemDC, 0, 0, SRCCOPY);
+    SelectObject(hMemDC, hOldBitmap);
 
-  // Deleting background objects and buffers
-  DeleteObject(hBackBitmap);
-  naFree(backBuffer);
-  naReleaseBabyImage(backImage);
+    // Deleting the blended objects and buffers
+    DeleteObject(hBlendedBitmap);
+    naFree(blendedBuffer);
+    naReleaseBabyImage(blendedImage);
+
+    // Deleting background objects and buffers
+    DeleteObject(hBackBitmap);
+    naFree(backBuffer);
+    naReleaseBabyImage(backImage);
+  }
 
   // Deleting device contexts
   DeleteDC(hMemDC);
@@ -185,78 +219,20 @@ NA_DEF NAButton* naNewTextButton(const NAUTF8Char* text, NASize size, uint32 fla
 
   na_InitButton((NAButton*)winapiButton, nativePtr);
   winapiButton->image = NA_NULL;
-  winapiButton->transparent = NA_FALSE;
+  winapiButton->state = 0;
+  #ifndef NDEBUG
+    if(naGetFlagu32(flags, NA_BUTTON_BORDERLESS))
+      naError("Borderless text buttons have undefined behaviour. Use Labels with reactions instead.");
+  #endif
+  naSetFlagu32(&(winapiButton->state), NA_WINAPI_BUTTON_BORDERLESS, naGetFlagu32(flags, NA_BUTTON_BORDERLESS)); 
+  naSetFlagu32(&(winapiButton->state), NA_WINAPI_BUTTON_STATEFUL, naGetFlagu32(flags, NA_BUTTON_STATEFUL)); 
 
   return (NAButton*)winapiButton;
 }
 
 
 
-//NA_DEF NAButton* naNewTextOptionButton(const NAUTF8Char* text, NASize size){
-//  NAWINAPIButton* winapiButton = naNew(NAWINAPIButton);
-//
-//  TCHAR* systemText = naAllocSystemStringWithUTF8String(text);
-//  
-//	HWND nativePtr = CreateWindow(
-//		TEXT("BUTTON"),
-//    systemText,
-//    WS_CHILD | WS_VISIBLE | BS_CENTER | BS_VCENTER | BS_TEXT | BS_PUSHBUTTON,
-//		0,
-//    0,
-//    (int)size.width,
-//    (int)size.height,
-//		naGetApplicationOffscreenWindow(),
-//    NULL,
-//    (HINSTANCE)naGetUIElementNativePtr(naGetApplication()),
-//    NULL);
-//  
-//  naFree(systemText);
-//
-//  SendMessage(nativePtr, WM_SETFONT, (WPARAM)na_GetFontWithKind(NA_FONT_KIND_SYSTEM), MAKELPARAM(TRUE, 0));
-//
-//  NAWINAPIApplication* app = (NAWINAPIApplication*)naGetApplication();
-//  WNDPROC oldproc = (WNDPROC)SetWindowLongPtr(nativePtr, GWLP_WNDPROC, (LONG_PTR)naWINAPIWindowCallback);
-//  if(!app->oldButtonWindowProc){app->oldButtonWindowProc = oldproc;}
-//
-//  na_InitButton((NAButton*)winapiButton, nativePtr);
-//  winapiButton->image = NA_NULL;
-//  winapiButton->transparent = NA_FALSE;
-//
-//  return (NAButton*)winapiButton;
-//}
-//
-//
-//
-//NA_DEF NAButton* naNewImageOptionButton(const NAUIImage* uiImage, NASize size){
-//  NAWINAPIButton* winapiButton = naNew(NAWINAPIButton);
-//
-//	HWND nativePtr = CreateWindow(
-//		TEXT("BUTTON"),
-//    TEXT(""),
-//    WS_CHILD | WS_VISIBLE | BS_OWNERDRAW | BS_PUSHBUTTON,
-//		0,
-//    0,
-//    (int)size.width,
-//    (int)size.height,
-//		naGetApplicationOffscreenWindow(),
-//    NULL,
-//    (HINSTANCE)naGetUIElementNativePtr(naGetApplication()),
-//    NULL);
-//  
-//  NAWINAPIApplication* app = (NAWINAPIApplication*)naGetApplication();
-//  WNDPROC oldproc = (WNDPROC)SetWindowLongPtr(nativePtr, GWLP_WNDPROC, (LONG_PTR)naWINAPIWindowCallback);
-//  if(!app->oldButtonWindowProc){app->oldButtonWindowProc = oldproc;}
-//
-//  na_InitButton((NAButton*)winapiButton, nativePtr);
-//  winapiButton->image = uiImage;
-//  winapiButton->transparent = NA_FALSE;
-//
-//  return (NAButton*)winapiButton;
-//}
-
-
-
-NA_DEF NAButton* naNewImageButton(NAUIImage* uiImage, NASize size, uint32 flags){
+NA_DEF NAButton* naNewImageButton(const NAUIImage* uiImage, NASize size, uint32 flags){
   NAWINAPIButton* winapiButton = naNew(NAWINAPIButton);
   
 	HWND nativePtr = CreateWindow(
@@ -278,7 +254,9 @@ NA_DEF NAButton* naNewImageButton(NAUIImage* uiImage, NASize size, uint32 flags)
 
   na_InitButton((NAButton*)winapiButton, nativePtr);
   winapiButton->image = uiImage;
-  winapiButton->transparent = NA_TRUE;
+  winapiButton->state = 0;
+  naSetFlagu32(&(winapiButton->state), NA_WINAPI_BUTTON_BORDERLESS, naGetFlagu32(flags, NA_BUTTON_BORDERLESS)); 
+  naSetFlagu32(&(winapiButton->state), NA_WINAPI_BUTTON_STATEFUL, naGetFlagu32(flags, NA_BUTTON_STATEFUL)); 
 
   return (NAButton*)winapiButton;
 }
@@ -286,7 +264,6 @@ NA_DEF NAButton* naNewImageButton(NAUIImage* uiImage, NASize size, uint32 flags)
 
 
 NA_DEF void na_DestructWINAPIButton(NAWINAPIButton* winapiButton){
-  if(winapiButton->image){naRelease(winapiButton->image);}
   na_ClearButton((NAButton*)winapiButton);
 }
 
@@ -298,9 +275,24 @@ NA_DEF void naSetButtonImage(NAButton* button, const NAUIImage* uiImage){
 
 
 
+NA_DEF NABool naGetButtonState(NAButton* button){
+  NAWINAPIButton* winapiButton = (NAWINAPIButton*)button;
+  // Note that BM_SETSTATE only changes the visual highlight, not the state of the
+  // WINAPI button. Therefore, we need a separate state boolean.
+  return naGetFlagu32(winapiButton->state, NA_WINAPI_BUTTON_STATE);
+}
+
+
+
 NA_DEF void naSetButtonState(NAButton* button, NABool state){
   NAWINAPIButton* winapiButton = (NAWINAPIButton*)button;
-  SendMessage(naGetUIElementNativePtr(winapiButton), BM_SETSTATE, (WPARAM)state, (LPARAM)NA_NULL);
+  // Note that BM_SETSTATE only changes the visual highlight, not the state of the
+  // WINAPI button. Therefore, we need a separate state boolean.
+  if(naGetFlagu32(winapiButton->state, NA_WINAPI_BUTTON_STATEFUL))
+  {
+    naSetFlagu32(&(winapiButton->state), NA_WINAPI_BUTTON_STATE, state);
+    SendMessage(naGetUIElementNativePtr(winapiButton), BM_SETSTATE, (WPARAM)state, (LPARAM)NA_NULL);
+  }
 }
 
 

@@ -18,9 +18,9 @@ struct ExperimentController{
 
   NALabel* textButtonLabel;
   NAButton* textPushButton;
-  NAButton* textPushButtonBorderless;
+  //NAButton* textPushButtonBorderless;
   NAButton* textPushButtonState;
-  NAButton* textPushButtonStateBorderless;
+  //NAButton* textPushButtonStateBorderless;
 
   NALabel* imageButtonLabel;
   NAButton* imagePushButton;
@@ -60,6 +60,7 @@ struct ExperimentController{
   NAMenuItem* menuItem2;
   NAMenuItem* menuItem3;
   NAMenuItem* menuItem4;
+  NAMenuItem* menuSeparator;
 
   int textOption;
   int imageOption;
@@ -83,20 +84,20 @@ NABool buttonPressed(NAReaction reaction){
   
   if(reaction.uiElement == con->textPushButton){
     labelString = naNewStringWithFormat("Text Push Button Pressed");
-  }else if(reaction.uiElement == con->textPushButtonBorderless){
-    labelString = naNewStringWithFormat("Borderless Text Push Button Pressed");
+  //}else if(reaction.uiElement == con->textPushButtonBorderless){
+  //  labelString = naNewStringWithFormat("Borderless Text Push Button Pressed");
   }else if(reaction.uiElement == con->textPushButtonState){
-    labelString = naNewStringWithFormat("Borderless Text Push Button Switched to %d", (int)state);
-  }else if(reaction.uiElement == con->textPushButtonStateBorderless){
-    labelString = naNewStringWithFormat("Borderless Text Push Button Switched to %d", (int)state);
+    labelString = naNewStringWithFormat("Text Stateful Button Switched to %d", (int)state);
+  //}else if(reaction.uiElement == con->textPushButtonStateBorderless){
+  //  labelString = naNewStringWithFormat("Borderless Text State Button Switched to %d", (int)state);
   }else if(reaction.uiElement == con->imagePushButton){
     labelString = naNewStringWithFormat("Image Push Button Pressed");
   }else if(reaction.uiElement == con->imagePushButtonBorderless){
     labelString = naNewStringWithFormat("Borderless Image Push Button Pressed");
   }else if(reaction.uiElement == con->imagePushButtonState){
-    labelString = naNewStringWithFormat("Borderless Image Push Button Switched to %d", (int)state);
+    labelString = naNewStringWithFormat("Image Stateful Button Switched to %d", (int)state);
   }else if(reaction.uiElement == con->imagePushButtonStateBorderless){
-    labelString = naNewStringWithFormat("Borderless Image Push Button Switched to %d", (int)state);
+    labelString = naNewStringWithFormat("Borderless Image Stateful Button Switched to %d", (int)state);
   }else{
     labelString = naNewString();
   }
@@ -228,7 +229,6 @@ ExperimentController* createExperimentController(){
     0);
 
   con->contentSpace = naNewSpace(naMakeSize(windowWidth, windowHeight));
-  naSetWindowContentSpace(con->experimentWindow, con->contentSpace);
   naAddUIReaction(con->experimentWindow, NA_UI_COMMAND_RESHAPE, windowReshaped, con);
 
   double curPosY = windowHeight - 42;
@@ -239,17 +239,17 @@ ExperimentController* createExperimentController(){
   naAddUIReaction(con->textPushButton, NA_UI_COMMAND_PRESSED, buttonPressed, con);
   naAddSpaceChild(con->contentSpace, con->textPushButton, naMakePos(left, curPosY));
 
-  con->textPushButtonBorderless = naNewTextButton("Push", naMakeSize(buttonSize, 24), NA_BUTTON_BORDERLESS);
-  naAddUIReaction(con->textPushButtonBorderless, NA_UI_COMMAND_PRESSED, buttonPressed, con);
-  naAddSpaceChild(con->contentSpace, con->textPushButtonBorderless, naMakePos(left + 1 * buttonSize, curPosY));
+  //con->textPushButtonBorderless = naNewTextButton("Push", naMakeSize(buttonSize, 24), NA_BUTTON_BORDERLESS);
+  //naAddUIReaction(con->textPushButtonBorderless, NA_UI_COMMAND_PRESSED, buttonPressed, con);
+  //naAddSpaceChild(con->contentSpace, con->textPushButtonBorderless, naMakePos(left + 1 * buttonSize, curPosY));
 
   con->textPushButtonState = naNewTextButton("State", naMakeSize(buttonSize, 24), NA_BUTTON_STATEFUL);
   naAddUIReaction(con->textPushButtonState, NA_UI_COMMAND_PRESSED, buttonPressed, con);
   naAddSpaceChild(con->contentSpace, con->textPushButtonState, naMakePos(left + 2 * buttonSize, curPosY));
 
-  con->textPushButtonStateBorderless = naNewTextButton("State", naMakeSize(buttonSize, 24), NA_BUTTON_BORDERLESS | NA_BUTTON_STATEFUL);
-  naAddUIReaction(con->textPushButtonStateBorderless, NA_UI_COMMAND_PRESSED, buttonPressed, con);
-  naAddSpaceChild(con->contentSpace, con->textPushButtonStateBorderless, naMakePos(left + 3 * buttonSize, curPosY));
+  //con->textPushButtonStateBorderless = naNewTextButton("State", naMakeSize(buttonSize, 24), NA_BUTTON_BORDERLESS | NA_BUTTON_STATEFUL);
+  //naAddUIReaction(con->textPushButtonStateBorderless, NA_UI_COMMAND_PRESSED, buttonPressed, con);
+  //naAddSpaceChild(con->contentSpace, con->textPushButtonStateBorderless, naMakePos(left + 3 * buttonSize, curPosY));
 
   curPosY -= 30;
   con->imageButtonLabel = naNewLabel("NAButton: ImageButton", naMakeSize(descSize, 22));
@@ -336,6 +336,7 @@ ExperimentController* createExperimentController(){
   con->menuItem2 = naNewMenuItem(con->menu, "Kohle, Kohle, Kohle", NA_NULL);
   con->menuItem3 = naNewMenuItem(con->menu, "None of that Objective-C rubbish", NA_NULL);
   con->menuItem4 = naNewMenuItem(con->menu, "Bread crumbs and beaver spit", NA_NULL);
+  con->menuSeparator = naNewMenuSeparator(con->menu, con->menuItem3);
   naAddUIReaction(con->menuItem0, NA_UI_COMMAND_PRESSED, menuItemSelected, con);
   naAddUIReaction(con->menuItem1, NA_UI_COMMAND_PRESSED, menuItemSelected, con);
   naAddUIReaction(con->menuItem2, NA_UI_COMMAND_PRESSED, menuItemSelected, con);
@@ -355,6 +356,7 @@ ExperimentController* createExperimentController(){
 
   con->textOption = 0;
 
+  naSetWindowContentSpace(con->experimentWindow, con->contentSpace);
   naShowWindow(con->experimentWindow);
 
   return con;
